@@ -1,7 +1,7 @@
 import json
 
-from ecma426.model import Token, SourceMapIndex
-from ecma426.vlq import decode_string, encode_values
+from .model import Token, SourceMapIndex
+from .vlq import decode_string, encode_values
 
 
 class IndexArray:

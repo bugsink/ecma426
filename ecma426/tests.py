@@ -1,8 +1,8 @@
 import json
 import unittest
-from ecma426.vlq import encode_value, encode_values, decode_string
-from ecma426.model import Token
-from codec import encode_tokens, decode_mappings, encode, decode
+from .vlq import encode_value, encode_values, decode_string
+from .model import Token
+from .codec import encode_tokens, decode_mappings, encode, decode
 
 
 class VlqTestCase(unittest.TestCase):
