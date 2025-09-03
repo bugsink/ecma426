@@ -230,5 +230,111 @@ class SourceMapIndexLookupTests(unittest.TestCase):
         self.assertEqual(index.lookup(1, 8), tokens_input[1])
 
 
+class IndexMapTests(unittest.TestCase):
+    def test_two_sections_flatten_offsets(self):
+        # section 1 (no offset)
+        s1_tokens = [
+            Token(dst_line=0, dst_col=0, src="a.js", src_line=0, src_col=0, name="A"),
+            Token(dst_line=0, dst_col=5, src="a.js", src_line=0, src_col=4),
+            Token(dst_line=1, dst_col=0),
+        ]
+        s1_map = encode(s1_tokens)
+
+        # section 2 (line=100, column=10); column offset applies only to first line
+        s2_tokens = [
+            Token(dst_line=0, dst_col=1, src="b.js", src_line=0, src_col=0, name="B"),
+            Token(dst_line=1, dst_col=2, src="b.js", src_line=1, src_col=0),
+        ]
+        s2_map = encode(s2_tokens)
+
+        index_map = {
+            "version": 3,
+            "file": "bundle.js",
+            "sections": [
+                {"offset": {"line": 0, "column": 0}, "map": s1_map},
+                {"offset": {"line": 100, "column": 10}, "map": s2_map},
+            ],
+        }
+
+        idx = decode(index_map)
+
+        expected = [
+            # s1 unchanged (offset 0,0)
+            *s1_tokens,
+            # s2 with offsets applied: +100 lines; +10 column on first line only
+            Token(dst_line=100, dst_col=11, src="b.js", src_line=0, src_col=0, name="B"),
+            Token(dst_line=101, dst_col=2,  src="b.js", src_line=1, src_col=0),
+        ]
+        self.assertEqual(list(idx), expected)
+
+        # exact lookups prove index constructed
+        for t in expected:
+            self.assertEqual(idx.lookup(t.dst_line, t.dst_col), t)
+
+    def test_empty_sections(self):
+        index_map = {"version": 3, "sections": []}
+        idx = decode(index_map)
+        self.assertEqual(list(idx), [])
+
+    def test_sections_must_be_list(self):
+        with self.assertRaises(TypeError):
+            decode({"version": 3, "sections": {}})
+
+    def test_section_must_be_object(self):
+        with self.assertRaises(TypeError):
+            decode({"version": 3, "sections": [42]})
+
+    def test_offset_shape(self):
+        bad1 = {"version": 3, "sections": [{"offset": {}, "map": encode([])}]}
+        bad2 = {"version": 3, "sections": [{"offset": {"line": "0", "column": 0}, "map": encode([])}]}
+        bad3 = {"version": 3, "sections": [{"offset": {"line": 0}, "map": encode([])}]}
+        for m in (bad1, bad2, bad3):
+            with self.assertRaises(TypeError):
+                decode(m)
+
+    def test_map_must_be_object(self):
+        with self.assertRaises(TypeError):
+            decode({"version": 3, "sections": [{"offset": {"line": 0, "column": 0}, "map": 123}]})
+
+    def test_sections_sorted_and_non_overlapping(self):
+        # same start as previous → invalid (must be strictly increasing by (line, column))
+        s = encode([Token(dst_line=0, dst_col=0)])
+        index_map = {
+            "version": 3,
+            "sections": [
+                {"offset": {"line": 10, "column": 5}, "map": s},
+                {"offset": {"line": 10, "column": 5}, "map": s},
+            ],
+        }
+        with self.assertRaises(ValueError):
+            decode(index_map)
+
+        # earlier start than previous → invalid
+        index_map2 = {
+            "version": 3,
+            "sections": [
+                {"offset": {"line": 20, "column": 0}, "map": s},
+                {"offset": {"line": 19, "column": 10}, "map": s},
+            ],
+        }
+        with self.assertRaises(ValueError):
+            decode(index_map2)
+
+    def test_embedded_regular_map_field_types(self):
+        # names entry not string
+        m1 = encode([Token(dst_line=0, dst_col=0)])
+        m1["names"] = ["ok", 123]
+        idx_map = {"version": 3, "sections": [{"offset": {"line": 0, "column": 0}, "map": m1}]}
+        with self.assertRaises(TypeError):
+            decode(idx_map)
+
+        # mappings not string
+        m2 = encode([Token(dst_line=0, dst_col=0)])
+        m2["mappings"] = 42
+        idx_map = {"version": 3, "sections": [{"offset": {"line": 0, "column": 0}, "map": m2}]}
+        with self.assertRaises(TypeError):
+            decode(idx_map)
+
+
 if __name__ == "__main__":
     unittest.main()

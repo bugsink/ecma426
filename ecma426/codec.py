@@ -22,7 +22,9 @@ class IndexArray:
         return self._items
 
 
-def decode_mappings(mappings: str, sources: list[str], names: list[str]) -> list[Token]:
+def decode_mappings(
+        mappings: str, sources: list[str], names: list[str], dst_col_offset=0, dst_line_offset=0) -> list[Token]:
+
     tokens = []
     if not mappings:
         return tokens
@@ -34,7 +36,7 @@ def decode_mappings(mappings: str, sources: list[str], names: list[str]) -> list
     name = None
 
     for dst_line, line in enumerate(mappings.split(";")):
-        dst_col = 0  # resets per generated line
+        dst_col = dst_col_offset if dst_line == 0 else 0  # resets per generated line (first line may have offset)
         if line == "":
             continue  # empty line is fine
 
@@ -49,7 +51,8 @@ def decode_mappings(mappings: str, sources: list[str], names: list[str]) -> list
 
             if len(fields) == 1:
                 # unmapped segment
-                tokens.append(Token(dst_line=dst_line, dst_col=dst_col, src="", src_line=0, src_col=0, name=None))
+                tokens.append(Token(
+                    dst_line=dst_line + dst_line_offset, dst_col=dst_col, src="", src_line=0, src_col=0, name=None))
                 continue
 
             # implied len(fields) in (4, 5)
@@ -73,7 +76,8 @@ def decode_mappings(mappings: str, sources: list[str], names: list[str]) -> list
                 name = None
 
             tokens.append(Token(
-                dst_line=dst_line, dst_col=dst_col, src=src, src_line=src_line, src_col=src_col, name=name))
+                dst_line=dst_line + dst_line_offset, dst_col=dst_col, src=src, src_line=src_line, src_col=src_col,
+                name=name))
 
     return tokens
 
@@ -129,11 +133,7 @@ def encode_tokens(tokens: list[Token]) -> tuple[str, list[str], list[str]]:
     return ";".join(per_dst_line), sources.items, names.items
 
 
-def decode(obj: dict) -> SourceMapIndex:
-    version = obj.get("version")
-    if version is not None and version != 3:
-        raise ValueError(f"unsupported version {version!r}; expected 3")
-
+def _parse_regular_map_fields(obj: dict) -> tuple[list[str | None], list[str], str]:
     sources_array = obj.get("sources", [])
     names_array = obj.get("names", [])
     mappings_string = obj.get("mappings", "")
@@ -143,12 +143,72 @@ def decode(obj: dict) -> SourceMapIndex:
     if not isinstance(sources_array, list) or any(x is not None and not isinstance(x, str) for x in sources_array):
         raise TypeError("'sources' must be a list of strings")
 
+    if not isinstance(sources_array, list) or any(x is not None and not isinstance(x, str) for x in sources_array):
+        raise TypeError("'sources' must be a list of strings or nulls")
     if not isinstance(names_array, list) or any(not isinstance(x, str) for x in names_array):
         raise TypeError("'names' must be a list of strings")
     if not isinstance(mappings_string, str):
         raise TypeError("'mappings' must be a string")
 
-    tokens = decode_mappings(mappings_string, sources_array, names_array)
+    return sources_array, names_array, mappings_string
+
+
+def decode_index_map(obj: dict) -> list[Token]:
+    # sections is the key in the json object, the spec calls this an "index map"
+    sections = obj.get("sections")
+    if not isinstance(sections, list):
+        raise TypeError("'sections' must be a list")
+
+    tokens: list[Token] = []
+    last_start: tuple[int, int] = (-1, -1)
+
+    for section in sections:
+        if not isinstance(section, dict):
+            raise TypeError("each section must be an object")
+
+        offset = section.get("offset")
+        if not (isinstance(offset, dict) and
+                isinstance(offset.get("line"), int) and
+                isinstance(offset.get("column"), int)):
+            raise TypeError("section.offset must be an object with integer 'line' and 'column'")
+
+        start = (offset["line"], offset["column"])
+        if start <= last_start:
+            # spec: “The sections shall be sorted by starting position and shall not overlap.”
+            raise ValueError("sections must be sorted by starting position and non-overlapping")
+
+        embedded = section.get("map")
+        if not isinstance(embedded, dict):
+            raise TypeError("section.map must be an object")
+
+        sources_array, names_array, mappings_string = _parse_regular_map_fields(embedded)
+
+        tokens.extend(
+            decode_mappings(
+                mappings_string,
+                sources_array,
+                names_array,
+                dst_col_offset=offset["column"],
+                dst_line_offset=offset["line"],
+            )
+        )
+        last_start = start
+
+    return tokens
+
+
+def decode(obj: dict) -> SourceMapIndex:
+    version = obj.get("version")
+    if version is not None and version != 3:
+        raise ValueError(f"unsupported version {version!r}; expected 3")
+
+    if "sections" in obj:
+        tokens = decode_index_map(obj)
+        sources_for_index = []  # index maps don’t have a top-level sources array
+    else:
+        sources_array, names_array, mappings_string = _parse_regular_map_fields(obj)
+        tokens = decode_mappings(mappings_string, sources_array, names_array)
+        sources_for_index = sources_array
 
     line_index = []
     index = {}
@@ -158,7 +218,7 @@ def decode(obj: dict) -> SourceMapIndex:
         line_index[token.dst_line].append(token.dst_col)
         index[(token.dst_line, token.dst_col)] = token
 
-    return SourceMapIndex(obj, tokens, line_index, index, sources=sources_array)
+    return SourceMapIndex(obj, tokens, line_index, index, sources=sources_for_index)
 
 
 def encode(tokens: list[Token], *, source_root: str | None = None, debug_id: str | None = None) -> dict:
