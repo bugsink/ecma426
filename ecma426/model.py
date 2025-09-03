@@ -35,6 +35,12 @@ class SourceMapIndex:
         self.sources = sources or []
 
     def lookup(self, line: int, column: int) -> Token:
+        """
+        Lookup semantics: exact hit if present; otherwise use the nearest-left mapping on the same generated line (max
+        dst_col <= column).
+        Note: this is conventional (devtools, python-sourcemap), not mandated by ECMA-426.
+        """
+
         try:
             return self.index[(line, column)]
         except KeyError:

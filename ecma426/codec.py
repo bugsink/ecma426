@@ -1,4 +1,6 @@
-from ecma426.model import Token
+import json
+
+from ecma426.model import Token, SourceMapIndex
 from ecma426.vlq import decode_string, encode_values
 
 
@@ -125,3 +127,56 @@ def encode_tokens(tokens: list[Token]) -> tuple[str, list[str], list[str]]:
         per_dst_line.append(",".join(segments))
 
     return ";".join(per_dst_line), sources.items, names.items
+
+
+def _strip_xssi_prefix(s: str) -> str:
+    if s.startswith(")]}'") or s.startswith(")]}"):
+        return s.split("\n", 1)[1]
+    return s
+
+
+def decode(obj: str | dict) -> SourceMapIndex:
+    if isinstance(obj, str):
+        obj = json.loads(_strip_xssi_prefix(obj))
+    if not isinstance(obj, dict):
+        raise TypeError("sourcemap must be a JSON object or JSON string")
+
+    version = obj.get("version")
+    if version is not None and version != 3:
+        raise ValueError(f"unsupported version {version!r}; expected 3")
+
+    sources_array = obj.get("sources", [])
+    names_array = obj.get("names", [])
+    mappings_string = obj.get("mappings", "")
+
+    if not isinstance(sources_array, list) or any(not isinstance(x, str) for x in sources_array):
+        raise TypeError("'sources' must be a list of strings")
+    if not isinstance(names_array, list) or any(not isinstance(x, str) for x in names_array):
+        raise TypeError("'names' must be a list of strings")
+    if not isinstance(mappings_string, str):
+        raise TypeError("'mappings' must be a string")
+
+    tokens = decode_mappings(mappings_string, sources_array, names_array)
+
+    line_index = []
+    index = {}
+    for token in tokens:
+        while len(line_index) <= token.dst_line:
+            line_index.append([])
+        line_index[token.dst_line].append(token.dst_col)
+        index[(token.dst_line, token.dst_col)] = token
+
+    return SourceMapIndex(obj, tokens, line_index, index, sources=sources_array)
+
+
+def encode(tokens: list[Token], *, source_root: str | None = None) -> dict:
+    mappings_string, sources_array, names_array = encode_tokens(tokens)
+    out = {
+        "version": 3,
+        "sources": sources_array,
+        "names": names_array,
+        "mappings": mappings_string,
+    }
+    if source_root is not None:
+        out["sourceRoot"] = source_root
+    return out
