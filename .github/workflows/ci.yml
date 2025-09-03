@@ -10,6 +10,7 @@ jobs:
   flake8:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11"]  # below 3.12 to avoid false positives inside f-strings
 
