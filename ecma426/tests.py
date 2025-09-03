@@ -1,6 +1,6 @@
 import json
 import unittest
-from .vlq import encode_value, encode_values, decode_string
+from .vlq import encode_values, decode_string, _INT_MIN, _INT_MAX
 from .model import Token
 from .codec import encode_tokens, decode_mappings, encode, decode
 from . import loads
@@ -11,17 +11,17 @@ class VlqTestCase(unittest.TestCase):
         return decode_string(encode_values(xs))
 
     def test_zero(self):
-        self.assertEqual(encode_value(0), "A")
+        self.assertEqual(encode_values([0]), "A")
         self.assertEqual(self.roundtrip([0]), [0])
 
     def test_one_and_minus_one(self):
-        self.assertEqual(encode_value(1), "C")   # to_vlq(1)=2 -> 'C'
-        self.assertEqual(encode_value(-1), "D")  # to_vlq(-1)=3 -> 'D'
+        self.assertEqual(encode_values([1]), "C")   # to_vlq(1)=2 -> 'C'
+        self.assertEqual(encode_values([-1]), "D")  # to_vlq(-1)=3 -> 'D'
         self.assertEqual(self.roundtrip([1, -1]), [1, -1])
 
     def test_multi_chunk_boundaries(self):
         # 16 -> to_vlq(16)=32, needs continuation: "gB"
-        self.assertEqual(encode_value(16), "gB")
+        self.assertEqual(encode_values([16]), "gB")
         self.assertEqual(self.roundtrip([16]), [16])
         self.assertEqual(self.roundtrip([-16, 32, -33]), [-16, 32, -33])
 
@@ -43,15 +43,50 @@ class VlqTestCase(unittest.TestCase):
 
     def test_known_examples_from_spec(self):
         # ECMA-426 examples: "iB" -> 17, "V" -> -10
-        self.assertEqual(encode_value(17), "iB")
+        self.assertEqual(encode_values([17]), "iB")
         self.assertEqual(decode_string("iB"), [17])
-        self.assertEqual(encode_value(-10), "V")
+        self.assertEqual(encode_values([-10]), "V")
         self.assertEqual(decode_string("V"), [-10])
 
     def test_known_segment_gaag(self):
         # "GAAG" stands for [3,0,0,3]
         self.assertEqual(encode_values([3, 0, 0, 3]), "GAAG")
         self.assertEqual(decode_string("GAAG"), [3, 0, 0, 3])
+
+
+class VlqSpecialCasesTests(unittest.TestCase):
+    def test_decode_min_int_literal(self):
+        # ECMA-426 §5.1 “Decode a base64 VLQ”, step 9:
+        #   “If value is 0 and sign is -1, return -2147483648.”
+        # One-char base64 'B' => first = 1 → sign = -1, value = 0 → _INT_MIN.
+        self.assertEqual(decode_string("B"), [_INT_MIN])
+
+    def test_encode_min_int_literal(self):
+        # Mirrors §5.1 step 9 special case on the encode side:
+        # _INT_MIN must decode from a single byte with sign=-1 and value=0 → base64 'B'.
+        self.assertEqual(encode_values([_INT_MIN]), "B")
+
+    def test_encode_rejects_out_of_range(self):
+        # ECMA-426 §5.1 step 7.f (decoder):
+        #   “If value is greater than or equal to 2^31, throw an error.”
+        # Encoder mirrors the same 32-bit bound.
+        with self.assertRaises(ValueError):
+            encode_values([_INT_MAX + 1])
+        with self.assertRaises(ValueError):
+            encode_values([_INT_MIN - 1])
+
+    def test_decode_rejects_overflow(self):
+        # ECMA-426 §5.1 step 7.f:
+        #   “If value is greater than or equal to 2^31, throw an error.”
+        # Long run of '/' keeps continuation on and pushes value beyond 2^31.
+        with self.assertRaises(ValueError):
+            decode_string("////////")
+
+    def test_roundtrip_edge_bounds(self):
+        # Within 32-bit range per §5.1/step 7.f bound.
+        for v in (0, 1, -1, 15, -15, 16, -16, 31, -31, 2**20, -(2**20), _INT_MIN, _INT_MAX):
+            s = encode_values([v])
+            self.assertEqual(decode_string(s), [v])
 
 
 class MappingsCodecTests(unittest.TestCase):
