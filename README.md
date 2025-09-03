@@ -2,6 +2,18 @@
 
 Python implementation of the ECMA-426 Source map format specification
 
+This library targets the ECMA-426 Source Map format (1st edition) and tracks the living draft for changes. The core VLQ `mappings` format is stable; new features are additive. We will adopt them as they reach consensus.
+
+**Actively watching:**
+
+- **Living spec & repo.** The ECMA-426 living draft and TC39 repository for ongoing edits and issues.
+  - Latest published snapshot: ECMA-426 (Dec 2024).
+  - Living spec: tc39.es/source-map.
+
+- **Debug IDs.** Self-identifying bundles + maps via a `debugId` field and a matching marker in the generated file. This repo already accepts/encodes `"debugId"` as an optional string.
+
+- **Scopes.** Structured variable/function scope data alongside `mappings` to improve stepping and locals in debuggers. Reference codec exists; expected to ship as additional fields, not changes to `mappings`.
+
 ## Understanding the spec
 
 The [spec](https://ecma-international.org/publications-and-standards/standards/ecma-426/) is precise but lacks exposure

@@ -169,7 +169,7 @@ def decode(obj: str | dict) -> SourceMapIndex:
     return SourceMapIndex(obj, tokens, line_index, index, sources=sources_array)
 
 
-def encode(tokens: list[Token], *, source_root: str | None = None) -> dict:
+def encode(tokens: list[Token], *, source_root: str | None = None, debug_id: str | None = None) -> dict:
     mappings_string, sources_array, names_array = encode_tokens(tokens)
     out = {
         "version": 3,
@@ -177,6 +177,11 @@ def encode(tokens: list[Token], *, source_root: str | None = None) -> dict:
         "names": names_array,
         "mappings": mappings_string,
     }
+
     if source_root is not None:
         out["sourceRoot"] = source_root
+
+    if debug_id is not None:
+        out["debugId"] = debug_id
+
     return out
