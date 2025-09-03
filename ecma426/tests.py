@@ -143,6 +143,9 @@ class JsonCodecTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             decode({"version": 3, "sources": [], "names": [], "mappings": 42})
 
+    def test_null_source(self):
+        decode({"version": 3, "sources": [None], "names": [], "mappings": ""})
+
     def test_wrong_version(self):
         with self.assertRaises(ValueError):
             decode({"version": 2, "sources": [], "names": [], "mappings": ""})

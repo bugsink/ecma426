@@ -58,6 +58,8 @@ def decode_mappings(mappings: str, sources: list[str], names: list[str]) -> list
             if not (0 <= src_idx < len(sources)):
                 raise ValueError(f"source index {src_idx} out of range")
             src = sources[src_idx]
+            if src is None:
+                src = ""
 
             src_line += fields[2]  # src_line_delta
             src_col += fields[3]  # src_col_delta
@@ -136,8 +138,11 @@ def decode(obj: dict) -> SourceMapIndex:
     names_array = obj.get("names", [])
     mappings_string = obj.get("mappings", "")
 
-    if not isinstance(sources_array, list) or any(not isinstance(x, str) for x in sources_array):
+    # ECMA-262 2024, §5 "Source map format" (bullet for sources):
+    # Each entry is either a string that is a (potentially relative) URL or null if the source name is not known.
+    if not isinstance(sources_array, list) or any(x is not None and not isinstance(x, str) for x in sources_array):
         raise TypeError("'sources' must be a list of strings")
+
     if not isinstance(names_array, list) or any(not isinstance(x, str) for x in names_array):
         raise TypeError("'names' must be a list of strings")
     if not isinstance(mappings_string, str):
