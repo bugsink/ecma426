@@ -3,6 +3,7 @@ import unittest
 from .vlq import encode_value, encode_values, decode_string
 from .model import Token
 from .codec import encode_tokens, decode_mappings, encode, decode
+from . import loads
 
 
 class VlqTestCase(unittest.TestCase):
@@ -146,10 +147,10 @@ class JsonCodecTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             decode({"version": 2, "sources": [], "names": [], "mappings": ""})
 
-    def test_xssi_prefix(self):
+    def test_loads_xssi_prefix(self):
         tokens = [Token(dst_line=0, dst_col=3, src="a.js", src_line=10, src_col=2, name="n")]
         payload = ")]}'\n" + json.dumps(encode(tokens))
-        index = decode(payload)
+        index = loads(payload)
         self.assertEqual(list(index), tokens)
 
 

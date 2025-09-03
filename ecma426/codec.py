@@ -1,5 +1,3 @@
-import json
-
 from .model import Token, SourceMapIndex
 from .vlq import decode_string, encode_values
 
@@ -129,18 +127,7 @@ def encode_tokens(tokens: list[Token]) -> tuple[str, list[str], list[str]]:
     return ";".join(per_dst_line), sources.items, names.items
 
 
-def _strip_xssi_prefix(s: str) -> str:
-    if s.startswith(")]}'") or s.startswith(")]}"):
-        return s.split("\n", 1)[1]
-    return s
-
-
-def decode(obj: str | dict) -> SourceMapIndex:
-    if isinstance(obj, str):
-        obj = json.loads(_strip_xssi_prefix(obj))
-    if not isinstance(obj, dict):
-        raise TypeError("sourcemap must be a JSON object or JSON string")
-
+def decode(obj: dict) -> SourceMapIndex:
     version = obj.get("version")
     if version is not None and version != 3:
         raise ValueError(f"unsupported version {version!r}; expected 3")
