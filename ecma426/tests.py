@@ -1,9 +1,17 @@
 import json
 import unittest
+from itertools import tee, zip_longest
+
 from .vlq import encode_values, decode_string, _INT_MIN, _INT_MAX
 from .model import Token
 from .codec import encode_tokens, decode_mappings, encode, decode
 from . import loads
+
+
+def shifted_pairs(iterable, fill=None):
+    a, b = tee(iterable)
+    next(b, None)
+    return zip_longest(a, b, fillvalue=fill)
 
 
 class VlqTestCase(unittest.TestCase):
@@ -334,6 +342,50 @@ class IndexMapTests(unittest.TestCase):
         idx_map = {"version": 3, "sections": [{"offset": {"line": 0, "column": 0}, "map": m2}]}
         with self.assertRaises(TypeError):
             decode(idx_map)
+
+
+class CaptureExceptionMapIntegrationTests(unittest.TestCase):
+
+    # MIN_JS and MAP taken from
+    # https://github.com/bugsink/event-samples/blob/main/bugsink/artifact_bundles/51a5a327666cf1d11e23adfd55c3becad27ae769.zip
+
+    MIN_JS = """
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="9b7990f8-1f25-571a-a422-03bea91eb8ab")}catch(e){}}();
+function bar(){Sentry.captureException(new Error("Sentry Test Error"))}function foo(){bar()}function captureException(){foo()}
+//# sourceMappingURL=captureException.min.js.map
+//# debugId=9b7990f8-1f25-571a-a422-03bea91eb8ab""" # noqa
+
+    MAP = r"""{"version":3,"sources":["captureException.js"],"sourcesContent":["\n\n\n\n\nfunction bar() {\n    Sentry.captureException(new Error(\"Sentry Test Error\"));\n}\n\nfunction foo() {\n    bar();\n}\n\nfunction captureException() {\n    foo();\n}\n"],"names":["bar","Sentry","captureException","Error","foo"],"mappings":";;AAKA,SAASA,MACLC,OAAOC,iBAAiB,IAAIC,MAAM,mBAAmB,CAAC,CAC1D,CAEA,SAASC,MACLJ,IAAI,CACR,CAEA,SAASE,mBACLE,IAAI,CACR","debug_id":"9b7990f8-1f25-571a-a422-03bea91eb8ab"}""" # noqa
+
+    def _display(self, lines, start_line, start_col, end_line, end_col):
+        """Extract substr from (start_line, start_col) up to (end_line, end_col); the quick & dirty way (no checks)."""
+
+        if start_line == end_line:
+            return lines[start_line][start_col:end_col]
+
+        parts = [lines[start_line][start_col:]]
+        parts.extend(lines[start_line + 1:end_line])
+        parts.append(lines[end_line][:end_col])
+
+        return "\n".join(parts)
+
+    def test_decode_and_probe_named_tokens(self):
+        def _min(s):
+            return s.replace(" ", "").replace("\n", "").replace(";", "")
+
+        index = loads(self.MAP)
+        tokens = list(index)
+
+        original = index.raw["sourcesContent"][0].splitlines()
+        min_js = self.MIN_JS.splitlines()
+
+        for token, next_token in shifted_pairs(tokens):
+            if not next_token:
+                continue  # slightly less complete test but not worth the effort
+
+            self.assertEqual(
+                _min(self._display(min_js, token.dst_line, token.dst_col, next_token.dst_line, next_token.dst_col)),
+                _min(self._display(original, token.src_line, token.src_col, next_token.src_line, next_token.src_col)))
 
 
 if __name__ == "__main__":
