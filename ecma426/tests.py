@@ -1,5 +1,7 @@
 import unittest
 from ecma426.vlq import encode_value, encode_values, decode_string
+from ecma426.model import Token
+from codec import encode_tokens, decode_mappings
 
 
 class VlqTestCase(unittest.TestCase):
@@ -48,6 +50,60 @@ class VlqTestCase(unittest.TestCase):
         # "GAAG" stands for [3,0,0,3]
         self.assertEqual(encode_values([3, 0, 0, 3]), "GAAG")
         self.assertEqual(decode_string("GAAG"), [3, 0, 0, 3])
+
+
+class CodecTests(unittest.TestCase):
+    def assert_roundtrip(self, tokens):
+        mappings_string, sources_array, names_array = encode_tokens(tokens)
+        decoded = decode_mappings(mappings_string, sources_array, names_array)
+        self.assertEqual(decoded, tokens)
+
+    def test_empty_roundtrip(self):
+        self.assert_roundtrip([])
+
+    def test_single_unmapped_roundtrip(self):
+        self.assert_roundtrip([Token(dst_line=0, dst_col=7)])
+
+    def test_single_mapped_no_name_roundtrip(self):
+        self.assert_roundtrip([Token(dst_line=0, dst_col=3, src="a.js", src_line=10, src_col=2)])
+
+    def test_single_mapped_with_name_roundtrip(self):
+        self.assert_roundtrip([Token(dst_line=0, dst_col=0, src="s.js", src_line=1, src_col=1, name="n")])
+
+    def test_unmapped_line_roundtrip(self):
+        self.assert_roundtrip([Token(dst_line=0, dst_col=c) for c in (0, 4, 9)])
+
+    def test_mapped_no_names_deltas_roundtrip(self):
+        self.assert_roundtrip([
+            Token(dst_line=0, dst_col=0, src="a.js", src_line=10, src_col=0),
+            Token(dst_line=0, dst_col=5, src="a.js", src_line=10, src_col=3),
+            Token(dst_line=0, dst_col=12, src="a.js", src_line=11, src_col=0),
+        ])
+
+    def test_mixed_named_unnamed_roundtrip(self):
+        self.assert_roundtrip([
+            Token(dst_line=0, dst_col=0,  src="m.js", src_line=0, src_col=0, name="alpha"),
+            Token(dst_line=0, dst_col=4,  src="m.js", src_line=0, src_col=3),
+            Token(dst_line=0, dst_col=8,  src="m.js", src_line=0, src_col=6, name="beta"),
+            Token(dst_line=1, dst_col=0,  src="m.js", src_line=1, src_col=0),
+            Token(dst_line=1, dst_col=10, src="m.js", src_line=1, src_col=5, name="gamma"),
+        ])
+
+    def test_offsets_across_lines_roundtrip(self):
+        self.assert_roundtrip([
+            Token(dst_line=0, dst_col=2,  src="s.js", src_line=5, src_col=1, name="n0"),
+            Token(dst_line=0, dst_col=9,  src="s.js", src_line=5, src_col=4),
+            Token(dst_line=1, dst_col=1,  src="s.js", src_line=6, src_col=0, name="n1"),
+            Token(dst_line=1, dst_col=6,  src="s.js", src_line=6, src_col=3),
+        ])
+
+    def test_decode_rejects_empty_segment(self):
+        with self.assertRaises(ValueError):
+            decode_mappings(",", [], [])
+
+    def test_decode_rejects_two_field_segment(self):
+        with self.assertRaises(ValueError):
+            decode_mappings("AA", [], [])
 
 
 if __name__ == "__main__":
