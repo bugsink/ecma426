@@ -19,6 +19,9 @@ classifiers = [
 ]
 dynamic = ["version", "dependencies"]
 
+[project.scripts]
+identity-sourcemap = "ecma426.scripts.identity_sourcemap:main"
+
 [project.urls]
 repository = "https://github.com/bugsink/ecma426/"
 issues = "https://github.com/bugsink/ecma426/issues"
