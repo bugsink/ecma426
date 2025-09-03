@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools_scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+version_file = "ecma426/scmversion.py"
+
+[project]
+name = "ecma426"
+authors = [
+    {name = "Bugsink B.V.", email = "info@bugsink.com"},
+]
+description = "Run arbirary scripts with sentry_sdk initialized to some DSN on the fly"
+readme = "README.md"
+requires-python = ">=3.8"
+license = "BSD-3-Clause"
+classifiers = [
+    "Programming Language :: Python :: 3",
+]
+dynamic = ["version", "dependencies"]
+
+[project.urls]
+repository = "https://github.com/bugsink/ecma426/"
+issues = "https://github.com/bugsink/ecma426/issues"
+
+[tool.setuptools]
+include-package-data = true  # this is the default, but explicit is better than implicit
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+    "ecma426*",
+]
+
+# exclude = ["my_package.tests*"]  # exclude packages matching these glob patterns (empty by default)
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
