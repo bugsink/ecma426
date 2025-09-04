@@ -157,8 +157,9 @@ class JsonCodecTests(unittest.TestCase):
         sourcemap_dict = encode(tokens)
         index = decode(sourcemap_dict)
         self.assertEqual(list(index), tokens)
+        # check that the index was built correctly as part of the decode step
         for token in tokens:
-            self.assertEqual(index.lookup(token.generated_line, token.generated_column), token)
+            self.assertEqual(index[(token.generated_line, token.generated_column)], token)
 
     def test_empty(self):
         self.assert_roundtrip([])
@@ -210,15 +211,15 @@ class SourceMapIndexLookupTests(unittest.TestCase):
             Mapping(generated_line=0, generated_column=5),
             Mapping(generated_line=0, generated_column=12),
         ])
-        self.assertEqual(index.lookup(0, 7).generated_column, 5)
-        self.assertEqual(index.lookup(0, 11).generated_column, 5)
+        self.assertEqual(index.lookup_left(0, 7).generated_column, 5)
+        self.assertEqual(index.lookup_left(0, 11).generated_column, 5)
 
     def test_beyond_last_returns_last(self):
         index = self.build_index([
             Mapping(generated_line=0, generated_column=2),
             Mapping(generated_line=0, generated_column=9),
         ])
-        self.assertEqual(index.lookup(0, 999).generated_column, 9)
+        self.assertEqual(index.lookup_left(0, 999).generated_column, 9)
 
     def test_before_first_raises(self):
         index = self.build_index([
@@ -226,7 +227,7 @@ class SourceMapIndexLookupTests(unittest.TestCase):
             Mapping(generated_line=0, generated_column=10),
         ])
         with self.assertRaises(IndexError):
-            index.lookup(0, 0)
+            index.lookup_left(0, 0)
 
     def test_exact_match(self):
         tokens_input = [
@@ -234,8 +235,8 @@ class SourceMapIndexLookupTests(unittest.TestCase):
             Mapping(generated_line=1, generated_column=8),
         ]
         index = self.build_index(tokens_input)
-        self.assertEqual(index.lookup(1, 0), tokens_input[0])
-        self.assertEqual(index.lookup(1, 8), tokens_input[1])
+        self.assertEqual(index.lookup_left(1, 0), tokens_input[0])
+        self.assertEqual(index.lookup_left(1, 8), tokens_input[1])
 
 
 class IndexMapTests(unittest.TestCase):
@@ -277,7 +278,7 @@ class IndexMapTests(unittest.TestCase):
 
         # exact lookups prove index constructed
         for t in expected:
-            self.assertEqual(idx.lookup(t.generated_line, t.generated_column), t)
+            self.assertEqual(idx[(t.generated_line, t.generated_column)], t)
 
     def test_empty_sections(self):
         index_map = {"version": 3, "sections": []}
@@ -386,6 +387,22 @@ function bar(){Sentry.captureException(new Error("Sentry Test Error"))}function 
             self.assertEqual(
                 _min(self._display(min_js, token.generated_line, token.generated_column, next_token.generated_line, next_token.generated_column)),
                 _min(self._display(original, token.original_line, token.original_column, next_token.original_line, next_token.original_column)))
+
+
+class StrictIndexingTests(unittest.TestCase):
+    def build_index(self, tokens_input):
+        return decode(encode(tokens_input))
+
+    def test_exact_indexing_succeeds(self):
+        t0 = Mapping(generated_line=1, generated_column=3)
+        idx = self.build_index([t0])
+        self.assertEqual(idx[(1, 3)], t0)
+
+    def test_indexing_missing_raises_keyerror(self):
+        t0 = Mapping(generated_line=1, generated_column=3)
+        idx = self.build_index([t0])
+        with self.assertRaises(KeyError):
+            _ = idx[(1, 2)]  # in-gap → strict lookup fails
 
 
 if __name__ == "__main__":

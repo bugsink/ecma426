@@ -32,7 +32,7 @@ class MappingIndex:
         self.index = index
         self.sources = sources or []
 
-    def lookup(self, line: int, column: int) -> Mapping:
+    def lookup_left(self, line: int, column: int) -> Mapping:
         """
         Lookup semantics: exact hit if present; otherwise use the nearest-left mapping on the same generated line (max
         generated_column <= column).
@@ -49,8 +49,8 @@ class MappingIndex:
                 raise IndexError
             return self.index[(line, cols[i - 1])]
 
-    def __getitem__(self, i):
-        return self.tokens[i]
+    def __getitem__(self, key: Tuple[int, int]):
+        return self.index[key]
 
     def __iter__(self):
         return iter(self.tokens)
