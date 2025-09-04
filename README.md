@@ -61,6 +61,18 @@ mapping = smap.lookup_left(line=10, column=42)
 ```
 
 
+Mapping back into original text:
+
+```
+source_text = smap.raw["sourcesContent"][0].splitlines()
+mapping = smap.lookup_left(line=10, column=42)
+line = source_text[mapping.original_line]
+print(line)
+print(" " * mapping.original_column + "^ here")
+```
+
+
+
 ## Future work / Roadmap
 
 We are closely watching the spec for any [proposed changes](https://github.com/tc39/ecma426/tree/main/proposals).
