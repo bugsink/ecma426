@@ -1,7 +1,11 @@
-# ecma426
+# Source map (ECMA-426) in Python
 
 A maintained, close-to-spec implementation of **ECMA-426: Source Maps** in pure Python.
 Supports both decoding and encoding, including index maps with sections.
+
+Source Maps are a way to map positions in minified/transformed JavaScript code
+back to the original source code, which is essential for debugging and error
+reporting.
 
 ## Features
 
