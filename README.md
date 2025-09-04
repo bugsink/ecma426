@@ -1,86 +1,67 @@
 # ecma426
 
-Python implementation of the ECMA-426 Source map format specification
+A maintained, close-to-spec implementation of **ECMA-426: Source Maps** in pure Python.
+Supports both decoding and encoding, including index maps with sections.
 
-This library targets the ECMA-426 Source Map format (1st edition) and tracks the living draft for changes. The core VLQ `mappings` format is stable; new features are additive. We will adopt them as they reach consensus.
+## Features
 
-**Actively watching:**
+* **Up to date** — tracks the current [ECMA-426 spec](https://tc39.es/source-map/).
+* **Close to spec** — code is organized around spec sections, making it easy to verify correctness.
+* **Pure Python** — no C extensions, no dependencies.
+* **Both directions** — decode JSON maps into Python structures, encode tokens back to valid sourcemaps.
+* **Sections supported** — index maps (`sections`) are handled according to the specification.
 
-- **Living spec & repo.** The ECMA-426 living draft and TC39 repository for ongoing edits and issues.
-  - Latest published snapshot: ECMA-426 (Dec 2024).
-  - Living spec: tc39.es/source-map.
+## Installation
 
-- **Debug IDs.** Self-identifying bundles + maps via a `debugId` field and a matching marker in the generated file. This repo already accepts/encodes `"debugId"` as an optional string.
-
-- **Scopes.** Structured variable/function scope data alongside `mappings` to improve stepping and locals in debuggers. Reference codec exists; expected to ship as additional fields, not changes to `mappings`.
-
-## Understanding the spec
-
-The [spec](https://ecma-international.org/publications-and-standards/standards/ecma-426/) is precise but lacks exposure
-of intention and high-level concepts. The below is my attempt to fill in the gaps.
-
-### Intention of source maps
-
-A source map lets you say:
-
-> This piece of generated code (what the runtime executes) came from this place in my original sources.
-
-* **Destination (dst)** = coordinates in the *generated* file (what the browser runs).
-* **Source (src)** = coordinates in the *original* file (before minify/transpile).
-
-So when an error happens at `bundle.js:1:853`, the map can tell you it’s really `foo.ts:42:7`.
-
-### Key concepts
-
-* **Token**: one mapping: `(dst_line, dst_col)` → `(src_file, src_line, src_col, optional name)`.
-
-* **Mappings string**: a compact encoding of all tokens, structured as:
-
-  * **Lines**: separated by semicolons (`;`), each line corresponds to a line in the generated file.
-  * **Segments**: within each line, separated by commas (`,`), each segment encodes one token.
-  * **Fields**: within each segment, a variable number of fields (1, 4, or 5), each field is a VLQ-encoded integer.
-      * 1 field = unmapped (just destination column).
-      * 4 fields = mapped (dst col + source id + line + col).
-      * 5 fields = mapped + a symbol name.
-
-* **Running totals**: each field is stored as a *delta* from the previous value (generated column resets per line; others carry across).
-
-#### The compression trick
-
-Source maps use **deltas** instead of full values.
-
-Absolute:
-
-```
-(0,100,0) (5,100,5) (10,100,10)
-src_line: "gB","gB","gB" → 6 chars
+```:::bash
+pip install ecma426
 ```
 
-Delta:
+## Usage
 
+Top-level decode:
+
+```:::python
+import json
+import ecma426
+
+with open("app.min.js.map") as f:
+    data = json.load(f)
+
+smap = ecma426.loads(data)
+print(smap.tokens[0])
 ```
-(0,100,0) (5,0,5) (5,0,5)
-src_line: "gB","A","A"   → 4 chars
+
+Low-level encode / decode:
+
+```:::python
+from ecma426 import codec
+from ecma426.model import Token
+
+tokens = [
+    Token(dst_line=0, dst_col=0, src="app.js", src_line=0, src_col=0, name=None)
+]
+
+# Encode into a sourcemap dict
+smap = codec.encode(tokens)
+
+# Decode back into a SourceMapIndex
+decoded = codec.decode(smap)
 ```
 
-So repeated fields collapse to tiny encodings, making real maps dramatically smaller.
+## Future work / Roadmap
 
-Note/gotcha: the generated column resets at each new destination line (;). All other fields (source id, original line, original column, name) carry over until changed.
+We are closely watching the spec for any [proposed changes](https://github.com/tc39/ecma426/tree/main/proposals).
 
-#### Unmapped segments
+Support for DebugIds (pass-through) is already included.
 
-Tokens with no source mapping are encoded as a single field segment. Though perhaps unintuitive, there are valid reasons for this:
 
-* **Generated code with no origin** (wrappers, helpers, polyfills).
-* **Maintain correct spacing** so later mapped tokens line up.
-* **Spec consistency** — every segment has at least a generated column field.
+## Alternatives
 
-### Quick inventory of key terms
+* [python-sourcemap](https://github.com/mattrobenolt/python-sourcemap) -- only supports decoding, no sections.
+* [evmar's python-sourcemap](https://github.com/evmar/python-sourcemap) -- unmaintained (13 years old).
+* [Sentry's symbolic](https://github.com/getsentry/symbolic) -- much more than sourcemaps; Rust dependency.
 
-* **Destination (dst)**: coordinates in generated code.
-* **Source (src)**: coordinates in original code.
-* **Token**: one mapping pair (dst → src + optional name).
-* **Segment**: encoded representation of a token inside the `mappings` string.
-* **Field**: one VLQ-encoded integer; fields can be concatenated into a segment because VLQ is self-delimiting.
-* **Mappings string**: semicolon-separated lines of comma-separated segments.
-* **Running totals / deltas**: the way each segment encodes its numbers, relative to the last.
+## License
+
+3-clause BSD, see [LICENSE](LICENSE).

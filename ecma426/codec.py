@@ -25,6 +25,11 @@ class IndexArray:
 def decode_mappings(
         mappings: str, sources: list[str], names: list[str], dst_col_offset=0, dst_line_offset=0) -> list[Token]:
 
+    # Decodes a SourceMap "mappings" string into Tokens. Each token maps a (dst_line, dst_col) to a source location and
+    # optional name. The string is structured as lines (separated by ';'), then segments (i.e. tokens) per line (','),
+    # and finally fields within each segment (no delimiters needed, VLQs are self-delimiting). Segments have 1 field
+    # (unmapped), 4 fields (mapped), or 5 fields (mapped with name).
+
     tokens = []
     if not mappings:
         return tokens
@@ -50,7 +55,7 @@ def decode_mappings(
             dst_col += dst_col_delta
 
             if len(fields) == 1:
-                # unmapped segment
+                # unmapped segment (rationale: generated code with no origin, e.g. wrappers, helpers, polyfills).
                 tokens.append(Token(
                     dst_line=dst_line + dst_line_offset, dst_col=dst_col, src="", src_line=0, src_col=0, name=None))
                 continue
