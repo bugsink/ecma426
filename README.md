@@ -5,7 +5,7 @@ Supports both decoding and encoding, including index maps with sections.
 
 ## Features
 
-* **Up to date** — tracks the current [ECMA-426 spec](https://tc39.es/source-map/).
+* **Up to date** — tracks the current [ECMA-426 spec](https://tc39.es/ecma426/).
 * **Close to spec** — code is organized around spec sections, making it easy to verify correctness.
 * **Pure Python** — no C extensions, no dependencies.
 * **Both directions** — decode JSON maps into Python structures, encode tokens back to valid sourcemaps.
