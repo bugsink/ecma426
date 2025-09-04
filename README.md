@@ -49,6 +49,18 @@ smap = codec.encode(tokens)
 decoded = codec.decode(smap)
 ```
 
+Lookups:
+
+```:::python
+# Strict lookup (exact match only, KeyError if absent)
+mapping = smap[(10, 42)]
+
+# Nearest-left lookup (will give you "something" at least for slight mismatches)
+# returns the mapping at or immediately before (line, column) on the same line
+mapping = smap.lookup_left(line=10, column=42)
+```
+
+
 ## Future work / Roadmap
 
 We are closely watching the spec for any [proposed changes](https://github.com/tc39/ecma426/tree/main/proposals).
