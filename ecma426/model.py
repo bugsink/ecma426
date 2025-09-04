@@ -1,43 +1,42 @@
-"""Interface-compatible with mattrobenolt/python-sourcemap (fresh impl)."""
-
 from dataclasses import dataclass
 from bisect import bisect_right
 from typing import Dict, List, Optional, Tuple
 
 
 @dataclass(eq=True)
-class Token:
+class Mapping:
     """
-    dst_line, dst_col: generated coordinates (0-based)
-    src:               source filename or '' (unmapped)
-    src_line, src_col: original coordinates (0-based)
+    generated_line, generated_column: generated coordinates (0-based)
+    source:               source filename or '' (unmapped)
+    original_line, original_column: original coordinates (0-based)
     name:              optional symbol name or None
     """
-    dst_line: int = 0
-    dst_col: int = 0
-    src: str = ""
-    src_line: int = 0
-    src_col: int = 0
+    generated_line: int = 0
+    generated_column: int = 0
+    source: str = ""
+    original_line: int = 0
+    original_column: int = 0
     name: Optional[str] = None
 
     def __repr__(self) -> str:
-        args = (self.src, self.dst_line, self.dst_col, self.src_line, self.src_col, self.name)
-        return "<Token: src=%r dst_line=%d dst_col=%d src_line=%d src_col=%d name=%r>" % args
+        args = (self.source, self.generated_line, self.generated_column, self.original_line, self.original_column, self.name)
+        return "<Mapping: source=%r generated_line=%d generated_column=%d original_line=%d original_column=%d name=%r>" % args
 
 
-class SourceMapIndex:
-    def __init__(self, raw, tokens: List[Token], line_index: List[List[int]],
-                 index: Dict[Tuple[int, int], Token], sources: Optional[List[str]] = None):
+class MappingIndex:
+    def __init__(self, raw, tokens: List[Mapping], line_index: List[List[int]],
+                 index: Dict[Tuple[int, int], Mapping], sources: Optional[List[str]] = None):
         self.raw = raw
         self.tokens = tokens
         self.line_index = line_index
         self.index = index
         self.sources = sources or []
 
-    def lookup(self, line: int, column: int) -> Token:
+    def lookup(self, line: int, column: int) -> Mapping:
         """
         Lookup semantics: exact hit if present; otherwise use the nearest-left mapping on the same generated line (max
-        dst_col <= column).
+        generated_column <= column).
+
         Note: this is conventional (devtools, python-sourcemap), not mandated by ECMA-426.
         """
 
@@ -60,4 +59,4 @@ class SourceMapIndex:
         return len(self.tokens)
 
     def __repr__(self):
-        return "<SourceMapIndex: %s>" % ", ".join(map(str, self.sources))
+        return "<MappingIndex: %s>" % ", ".join(map(str, self.sources))

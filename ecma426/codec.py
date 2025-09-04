@@ -1,4 +1,4 @@
-from .model import Token, SourceMapIndex
+from .model import Mapping, MappingIndex
 from .vlq import decode_string, encode_values
 
 
@@ -23,9 +23,9 @@ class IndexArray:
 
 
 def decode_mappings(
-        mappings: str, sources: list[str], names: list[str], dst_col_offset=0, dst_line_offset=0) -> list[Token]:
+        mappings: str, sources: list[str], names: list[str], generated_column_offset=0, generated_line_offset=0) -> list[Mapping]:
 
-    # Decodes a SourceMap "mappings" string into Tokens. Each token maps a (dst_line, dst_col) to a source location and
+    # Decodes a SourceMap "mappings" string into Tokens. Each token maps a (generated_line, generated_column) to a source location and
     # optional name. The string is structured as lines (separated by ';'), then segments (i.e. tokens) per line (','),
     # and finally fields within each segment (no delimiters needed, VLQs are self-delimiting). Segments have 1 field
     # (unmapped), 4 fields (mapped), or 5 fields (mapped with name).
@@ -34,14 +34,14 @@ def decode_mappings(
     if not mappings:
         return tokens
 
-    src_idx = 0
-    src_line = 0
-    src_col = 0
+    source_idx = 0
+    original_line = 0
+    original_column = 0
     name_idx = 0
     name = None
 
-    for dst_line, line in enumerate(mappings.split(";")):
-        dst_col = dst_col_offset if dst_line == 0 else 0  # resets per generated line (first line may have offset)
+    for generated_line, line in enumerate(mappings.split(";")):
+        generated_column = generated_column_offset if generated_line == 0 else 0  # resets per generated line (first line may have offset)
         if line == "":
             continue  # empty line is fine
 
@@ -51,26 +51,26 @@ def decode_mappings(
             if len(fields) not in (1, 4, 5):
                 raise ValueError(f"invalid segment shape {len(fields)}: {segment!r}")
 
-            dst_col_delta = fields[0]
-            dst_col += dst_col_delta
+            generated_column_delta = fields[0]
+            generated_column += generated_column_delta
 
             if len(fields) == 1:
                 # unmapped segment (rationale: generated code with no origin, e.g. wrappers, helpers, polyfills).
-                tokens.append(Token(
-                    dst_line=dst_line + dst_line_offset, dst_col=dst_col, src="", src_line=0, src_col=0, name=None))
+                tokens.append(Mapping(
+                    generated_line=generated_line + generated_line_offset, generated_column=generated_column, source="", original_line=0, original_column=0, name=None))
                 continue
 
             # implied len(fields) in (4, 5)
 
-            src_idx += fields[1]  # src_idx_delta
-            if not (0 <= src_idx < len(sources)):
-                raise ValueError(f"source index {src_idx} out of range")
-            src = sources[src_idx]
-            if src is None:
-                src = ""
+            source_idx += fields[1]  # src_idx_delta
+            if not (0 <= source_idx < len(sources)):
+                raise ValueError(f"source index {source_idx} out of range")
+            source = sources[source_idx]
+            if source is None:
+                source = ""
 
-            src_line += fields[2]  # src_line_delta
-            src_col += fields[3]  # src_col_delta
+            original_line += fields[2]  # original_line_delta
+            original_column += fields[3]  # original_column_delta
 
             if len(fields) == 5:
                 name_idx += fields[4]
@@ -80,50 +80,50 @@ def decode_mappings(
             else:
                 name = None
 
-            tokens.append(Token(
-                dst_line=dst_line + dst_line_offset, dst_col=dst_col, src=src, src_line=src_line, src_col=src_col,
+            tokens.append(Mapping(
+                generated_line=generated_line + generated_line_offset, generated_column=generated_column, source=source, original_line=original_line, original_column=original_column,
                 name=name))
 
     return tokens
 
 
-def encode_tokens(tokens: list[Token]) -> tuple[str, list[str], list[str]]:
+def encode_mappings(tokens: list[Mapping]) -> tuple[str, list[str], list[str]]:
     if not tokens:
         return "", [], []
 
-    tokens_by_line: dict[int, list[Token]] = {}
-    for t in sorted(tokens, key=lambda x: (x.dst_line, x.dst_col)):
-        tokens_by_line.setdefault(t.dst_line, []).append(t)
+    tokens_by_line: dict[int, list[Mapping]] = {}
+    for t in sorted(tokens, key=lambda x: (x.generated_line, x.generated_column)):
+        tokens_by_line.setdefault(t.generated_line, []).append(t)
 
     sources = IndexArray()
     names = IndexArray()
 
-    src_idx = 0
-    src_line = 0
-    src_col = 0
+    source_idx = 0
+    original_line = 0
+    original_column = 0
     name_idx = 0
 
     per_dst_line = []
 
     for line_no in range(max(tokens_by_line) + 1 if tokens_by_line else 0):
         line_tokens = tokens_by_line.get(line_no, [])
-        dst_col = 0  # resets per dst line
+        generated_column = 0  # resets per dst line
         segments = []
 
         for token in line_tokens:
             # start with 1 field
-            fields = [token.dst_col - dst_col]  # dst_col delta
-            dst_col = token.dst_col
+            fields = [token.generated_column - generated_column]  # generated_column delta
+            generated_column = token.generated_column
 
-            if token.src:
+            if token.source:
                 # extend to 4 field version
-                new_src_idx = sources.index_for(token.src)
+                new_src_idx = sources.index_for(token.source)
                 fields += [
-                    new_src_idx - src_idx,
-                    token.src_line - src_line,
-                    token.src_col - src_col,
+                    new_src_idx - source_idx,
+                    token.original_line - original_line,
+                    token.original_column - original_column,
                 ]
-                src_idx, src_line, src_col = new_src_idx, token.src_line, token.src_col
+                source_idx, original_line, original_column = new_src_idx, token.original_line, token.original_column
 
                 if token.name is not None:
                     # extend to 5 field version
@@ -138,7 +138,7 @@ def encode_tokens(tokens: list[Token]) -> tuple[str, list[str], list[str]]:
     return ";".join(per_dst_line), sources.items, names.items
 
 
-def _parse_regular_map_fields(obj: dict) -> tuple[list[str | None], list[str], str]:
+def _parse_source_map_fields(obj: dict) -> tuple[list[str | None], list[str], str]:
     sources_array = obj.get("sources", [])
     names_array = obj.get("names", [])
     mappings_string = obj.get("mappings", "")
@@ -158,13 +158,13 @@ def _parse_regular_map_fields(obj: dict) -> tuple[list[str | None], list[str], s
     return sources_array, names_array, mappings_string
 
 
-def decode_index_map(obj: dict) -> list[Token]:
+def decode_index_map(obj: dict) -> list[Mapping]:
     # sections is the key in the json object, the spec calls this an "index map"
     sections = obj.get("sections")
     if not isinstance(sections, list):
         raise TypeError("'sections' must be a list")
 
-    tokens: list[Token] = []
+    tokens: list[Mapping] = []
     last_start: tuple[int, int] = (-1, -1)
 
     for section in sections:
@@ -186,15 +186,15 @@ def decode_index_map(obj: dict) -> list[Token]:
         if not isinstance(embedded, dict):
             raise TypeError("section.map must be an object")
 
-        sources_array, names_array, mappings_string = _parse_regular_map_fields(embedded)
+        sources_array, names_array, mappings_string = _parse_source_map_fields(embedded)
 
         tokens.extend(
             decode_mappings(
                 mappings_string,
                 sources_array,
                 names_array,
-                dst_col_offset=offset["column"],
-                dst_line_offset=offset["line"],
+                generated_column_offset=offset["column"],
+                generated_line_offset=offset["line"],
             )
         )
         last_start = start
@@ -202,7 +202,7 @@ def decode_index_map(obj: dict) -> list[Token]:
     return tokens
 
 
-def decode(obj: dict) -> SourceMapIndex:
+def decode(obj: dict) -> MappingIndex:
     version = obj.get("version")
     if version is not None and version != 3:
         raise ValueError(f"unsupported version {version!r}; expected 3")
@@ -211,23 +211,23 @@ def decode(obj: dict) -> SourceMapIndex:
         tokens = decode_index_map(obj)
         sources_for_index = []  # index maps don’t have a top-level sources array
     else:
-        sources_array, names_array, mappings_string = _parse_regular_map_fields(obj)
+        sources_array, names_array, mappings_string = _parse_source_map_fields(obj)
         tokens = decode_mappings(mappings_string, sources_array, names_array)
         sources_for_index = sources_array
 
     line_index = []
     index = {}
     for token in tokens:
-        while len(line_index) <= token.dst_line:
+        while len(line_index) <= token.generated_line:
             line_index.append([])
-        line_index[token.dst_line].append(token.dst_col)
-        index[(token.dst_line, token.dst_col)] = token
+        line_index[token.generated_line].append(token.generated_column)
+        index[(token.generated_line, token.generated_column)] = token
 
-    return SourceMapIndex(obj, tokens, line_index, index, sources=sources_for_index)
+    return MappingIndex(obj, tokens, line_index, index, sources=sources_for_index)
 
 
-def encode(tokens: list[Token], *, source_root: str | None = None, debug_id: str | None = None) -> dict:
-    mappings_string, sources_array, names_array = encode_tokens(tokens)
+def encode(tokens: list[Mapping], *, source_root: str | None = None, debug_id: str | None = None) -> dict:
+    mappings_string, sources_array, names_array = encode_mappings(tokens)
     out = {
         "version": 3,
         "sources": sources_array,

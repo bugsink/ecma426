@@ -3,8 +3,8 @@ import unittest
 from itertools import tee, zip_longest
 
 from .vlq import encode_values, decode_string, _INT_MIN, _INT_MAX
-from .model import Token
-from .codec import encode_tokens, decode_mappings, encode, decode
+from .model import Mapping
+from .codec import encode_mappings, decode_mappings, encode, decode
 from . import loads
 
 
@@ -99,7 +99,7 @@ class VlqSpecialCasesTests(unittest.TestCase):
 
 class MappingsCodecTests(unittest.TestCase):
     def assert_roundtrip(self, tokens):
-        mappings_string, sources_array, names_array = encode_tokens(tokens)
+        mappings_string, sources_array, names_array = encode_mappings(tokens)
         decoded = decode_mappings(mappings_string, sources_array, names_array)
         self.assertEqual(decoded, tokens)
 
@@ -107,39 +107,39 @@ class MappingsCodecTests(unittest.TestCase):
         self.assert_roundtrip([])
 
     def test_single_unmapped_roundtrip(self):
-        self.assert_roundtrip([Token(dst_line=0, dst_col=7)])
+        self.assert_roundtrip([Mapping(generated_line=0, generated_column=7)])
 
     def test_single_mapped_no_name_roundtrip(self):
-        self.assert_roundtrip([Token(dst_line=0, dst_col=3, src="a.js", src_line=10, src_col=2)])
+        self.assert_roundtrip([Mapping(generated_line=0, generated_column=3, source="a.js", original_line=10, original_column=2)])
 
     def test_single_mapped_with_name_roundtrip(self):
-        self.assert_roundtrip([Token(dst_line=0, dst_col=0, src="s.js", src_line=1, src_col=1, name="n")])
+        self.assert_roundtrip([Mapping(generated_line=0, generated_column=0, source="s.js", original_line=1, original_column=1, name="n")])
 
     def test_unmapped_line_roundtrip(self):
-        self.assert_roundtrip([Token(dst_line=0, dst_col=c) for c in (0, 4, 9)])
+        self.assert_roundtrip([Mapping(generated_line=0, generated_column=c) for c in (0, 4, 9)])
 
     def test_mapped_no_names_deltas_roundtrip(self):
         self.assert_roundtrip([
-            Token(dst_line=0, dst_col=0, src="a.js", src_line=10, src_col=0),
-            Token(dst_line=0, dst_col=5, src="a.js", src_line=10, src_col=3),
-            Token(dst_line=0, dst_col=12, src="a.js", src_line=11, src_col=0),
+            Mapping(generated_line=0, generated_column=0, source="a.js", original_line=10, original_column=0),
+            Mapping(generated_line=0, generated_column=5, source="a.js", original_line=10, original_column=3),
+            Mapping(generated_line=0, generated_column=12, source="a.js", original_line=11, original_column=0),
         ])
 
     def test_mixed_named_unnamed_roundtrip(self):
         self.assert_roundtrip([
-            Token(dst_line=0, dst_col=0,  src="m.js", src_line=0, src_col=0, name="alpha"),
-            Token(dst_line=0, dst_col=4,  src="m.js", src_line=0, src_col=3),
-            Token(dst_line=0, dst_col=8,  src="m.js", src_line=0, src_col=6, name="beta"),
-            Token(dst_line=1, dst_col=0,  src="m.js", src_line=1, src_col=0),
-            Token(dst_line=1, dst_col=10, src="m.js", src_line=1, src_col=5, name="gamma"),
+            Mapping(generated_line=0, generated_column=0,  source="m.js", original_line=0, original_column=0, name="alpha"),
+            Mapping(generated_line=0, generated_column=4,  source="m.js", original_line=0, original_column=3),
+            Mapping(generated_line=0, generated_column=8,  source="m.js", original_line=0, original_column=6, name="beta"),
+            Mapping(generated_line=1, generated_column=0,  source="m.js", original_line=1, original_column=0),
+            Mapping(generated_line=1, generated_column=10, source="m.js", original_line=1, original_column=5, name="gamma"),
         ])
 
     def test_offsets_across_lines_roundtrip(self):
         self.assert_roundtrip([
-            Token(dst_line=0, dst_col=2,  src="s.js", src_line=5, src_col=1, name="n0"),
-            Token(dst_line=0, dst_col=9,  src="s.js", src_line=5, src_col=4),
-            Token(dst_line=1, dst_col=1,  src="s.js", src_line=6, src_col=0, name="n1"),
-            Token(dst_line=1, dst_col=6,  src="s.js", src_line=6, src_col=3),
+            Mapping(generated_line=0, generated_column=2,  source="s.js", original_line=5, original_column=1, name="n0"),
+            Mapping(generated_line=0, generated_column=9,  source="s.js", original_line=5, original_column=4),
+            Mapping(generated_line=1, generated_column=1,  source="s.js", original_line=6, original_column=0, name="n1"),
+            Mapping(generated_line=1, generated_column=6,  source="s.js", original_line=6, original_column=3),
         ])
 
     def test_decode_rejects_empty_segment(self):
@@ -158,24 +158,24 @@ class JsonCodecTests(unittest.TestCase):
         index = decode(sourcemap_dict)
         self.assertEqual(list(index), tokens)
         for token in tokens:
-            self.assertEqual(index.lookup(token.dst_line, token.dst_col), token)
+            self.assertEqual(index.lookup(token.generated_line, token.generated_column), token)
 
     def test_empty(self):
         self.assert_roundtrip([])
 
     def test_single_line(self):
         self.assert_roundtrip([
-            Token(dst_line=0, dst_col=0, src="a.js", src_line=0, src_col=0, name="A"),
-            Token(dst_line=0, dst_col=5, src="a.js", src_line=0, src_col=4),
-            Token(dst_line=0, dst_col=12),
+            Mapping(generated_line=0, generated_column=0, source="a.js", original_line=0, original_column=0, name="A"),
+            Mapping(generated_line=0, generated_column=5, source="a.js", original_line=0, original_column=4),
+            Mapping(generated_line=0, generated_column=12),
         ])
 
     def test_multi_line(self):
         self.assert_roundtrip([
-            Token(dst_line=0, dst_col=0),
-            Token(dst_line=0, dst_col=6, src="x.js", src_line=1, src_col=2, name="X"),
-            Token(dst_line=1, dst_col=0, src="y.js", src_line=10, src_col=0),
-            Token(dst_line=1, dst_col=7, src="y.js", src_line=10, src_col=5, name="Y"),
+            Mapping(generated_line=0, generated_column=0),
+            Mapping(generated_line=0, generated_column=6, source="x.js", original_line=1, original_column=2, name="X"),
+            Mapping(generated_line=1, generated_column=0, source="y.js", original_line=10, original_column=0),
+            Mapping(generated_line=1, generated_column=7, source="y.js", original_line=10, original_column=5, name="Y"),
         ])
 
     def test_strict_types(self):
@@ -194,7 +194,7 @@ class JsonCodecTests(unittest.TestCase):
             decode({"version": 2, "sources": [], "names": [], "mappings": ""})
 
     def test_loads_xssi_prefix(self):
-        tokens = [Token(dst_line=0, dst_col=3, src="a.js", src_line=10, src_col=2, name="n")]
+        tokens = [Mapping(generated_line=0, generated_column=3, source="a.js", original_line=10, original_column=2, name="n")]
         payload = ")]}'\n" + json.dumps(encode(tokens))
         index = loads(payload)
         self.assertEqual(list(index), tokens)
@@ -206,32 +206,32 @@ class SourceMapIndexLookupTests(unittest.TestCase):
 
     def test_in_gap_chooses_left(self):
         index = self.build_index([
-            Token(dst_line=0, dst_col=0),
-            Token(dst_line=0, dst_col=5),
-            Token(dst_line=0, dst_col=12),
+            Mapping(generated_line=0, generated_column=0),
+            Mapping(generated_line=0, generated_column=5),
+            Mapping(generated_line=0, generated_column=12),
         ])
-        self.assertEqual(index.lookup(0, 7).dst_col, 5)
-        self.assertEqual(index.lookup(0, 11).dst_col, 5)
+        self.assertEqual(index.lookup(0, 7).generated_column, 5)
+        self.assertEqual(index.lookup(0, 11).generated_column, 5)
 
     def test_beyond_last_returns_last(self):
         index = self.build_index([
-            Token(dst_line=0, dst_col=2),
-            Token(dst_line=0, dst_col=9),
+            Mapping(generated_line=0, generated_column=2),
+            Mapping(generated_line=0, generated_column=9),
         ])
-        self.assertEqual(index.lookup(0, 999).dst_col, 9)
+        self.assertEqual(index.lookup(0, 999).generated_column, 9)
 
     def test_before_first_raises(self):
         index = self.build_index([
-            Token(dst_line=0, dst_col=3),
-            Token(dst_line=0, dst_col=10),
+            Mapping(generated_line=0, generated_column=3),
+            Mapping(generated_line=0, generated_column=10),
         ])
         with self.assertRaises(IndexError):
             index.lookup(0, 0)
 
     def test_exact_match(self):
         tokens_input = [
-            Token(dst_line=1, dst_col=0),
-            Token(dst_line=1, dst_col=8),
+            Mapping(generated_line=1, generated_column=0),
+            Mapping(generated_line=1, generated_column=8),
         ]
         index = self.build_index(tokens_input)
         self.assertEqual(index.lookup(1, 0), tokens_input[0])
@@ -242,16 +242,16 @@ class IndexMapTests(unittest.TestCase):
     def test_two_sections_flatten_offsets(self):
         # section 1 (no offset)
         s1_tokens = [
-            Token(dst_line=0, dst_col=0, src="a.js", src_line=0, src_col=0, name="A"),
-            Token(dst_line=0, dst_col=5, src="a.js", src_line=0, src_col=4),
-            Token(dst_line=1, dst_col=0),
+            Mapping(generated_line=0, generated_column=0, source="a.js", original_line=0, original_column=0, name="A"),
+            Mapping(generated_line=0, generated_column=5, source="a.js", original_line=0, original_column=4),
+            Mapping(generated_line=1, generated_column=0),
         ]
         s1_map = encode(s1_tokens)
 
         # section 2 (line=100, column=10); column offset applies only to first line
         s2_tokens = [
-            Token(dst_line=0, dst_col=1, src="b.js", src_line=0, src_col=0, name="B"),
-            Token(dst_line=1, dst_col=2, src="b.js", src_line=1, src_col=0),
+            Mapping(generated_line=0, generated_column=1, source="b.js", original_line=0, original_column=0, name="B"),
+            Mapping(generated_line=1, generated_column=2, source="b.js", original_line=1, original_column=0),
         ]
         s2_map = encode(s2_tokens)
 
@@ -270,14 +270,14 @@ class IndexMapTests(unittest.TestCase):
             # s1 unchanged (offset 0,0)
             *s1_tokens,
             # s2 with offsets applied: +100 lines; +10 column on first line only
-            Token(dst_line=100, dst_col=11, src="b.js", src_line=0, src_col=0, name="B"),
-            Token(dst_line=101, dst_col=2,  src="b.js", src_line=1, src_col=0),
+            Mapping(generated_line=100, generated_column=11, source="b.js", original_line=0, original_column=0, name="B"),
+            Mapping(generated_line=101, generated_column=2,  source="b.js", original_line=1, original_column=0),
         ]
         self.assertEqual(list(idx), expected)
 
         # exact lookups prove index constructed
         for t in expected:
-            self.assertEqual(idx.lookup(t.dst_line, t.dst_col), t)
+            self.assertEqual(idx.lookup(t.generated_line, t.generated_column), t)
 
     def test_empty_sections(self):
         index_map = {"version": 3, "sections": []}
@@ -306,7 +306,7 @@ class IndexMapTests(unittest.TestCase):
 
     def test_sections_sorted_and_non_overlapping(self):
         # same start as previous → invalid (must be strictly increasing by (line, column))
-        s = encode([Token(dst_line=0, dst_col=0)])
+        s = encode([Mapping(generated_line=0, generated_column=0)])
         index_map = {
             "version": 3,
             "sections": [
@@ -330,14 +330,14 @@ class IndexMapTests(unittest.TestCase):
 
     def test_embedded_regular_map_field_types(self):
         # names entry not string
-        m1 = encode([Token(dst_line=0, dst_col=0)])
+        m1 = encode([Mapping(generated_line=0, generated_column=0)])
         m1["names"] = ["ok", 123]
         idx_map = {"version": 3, "sections": [{"offset": {"line": 0, "column": 0}, "map": m1}]}
         with self.assertRaises(TypeError):
             decode(idx_map)
 
         # mappings not string
-        m2 = encode([Token(dst_line=0, dst_col=0)])
+        m2 = encode([Mapping(generated_line=0, generated_column=0)])
         m2["mappings"] = 42
         idx_map = {"version": 3, "sections": [{"offset": {"line": 0, "column": 0}, "map": m2}]}
         with self.assertRaises(TypeError):
@@ -384,8 +384,8 @@ function bar(){Sentry.captureException(new Error("Sentry Test Error"))}function 
                 continue  # slightly less complete test but not worth the effort
 
             self.assertEqual(
-                _min(self._display(min_js, token.dst_line, token.dst_col, next_token.dst_line, next_token.dst_col)),
-                _min(self._display(original, token.src_line, token.src_col, next_token.src_line, next_token.src_col)))
+                _min(self._display(min_js, token.generated_line, token.generated_column, next_token.generated_line, next_token.generated_column)),
+                _min(self._display(original, token.original_line, token.original_column, next_token.original_line, next_token.original_column)))
 
 
 if __name__ == "__main__":

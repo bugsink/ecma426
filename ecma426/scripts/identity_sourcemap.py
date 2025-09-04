@@ -4,19 +4,19 @@ import json
 from pathlib import Path
 
 from ecma426.codec import encode
-from ecma426.model import Token
+from ecma426.model import Mapping
 
 
-def build_identity_line_tokens(js_text: str, js_path: str) -> list[Token]:
+def build_identity_line_tokens(js_text: str, js_path: str) -> list[Mapping]:
     """
     One mapped segment per generated line:
-      (dst_line=i, dst_col=0) -> (src=js_path, src_line=i, src_col=0)
+      (generated_line=i, generated_column=0) -> (source=js_path, original_line=i, original_column=0)
     """
     # Count lines like typical JS tooling: split on '\n'
     # Ensures a trailing newline still counts as a new (empty) line segment.
     line_count = js_text.count("\n") + 1
     return [
-        Token(dst_line=i, dst_col=0, src=js_path, src_line=i, src_col=0, name=None)
+        Mapping(generated_line=i, generated_column=0, source=js_path, original_line=i, original_column=0, name=None)
         for i in range(line_count)
     ]
 

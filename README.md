@@ -36,16 +36,16 @@ Low-level encode / decode:
 
 ```:::python
 from ecma426 import codec
-from ecma426.model import Token
+from ecma426.model import Mapping
 
 tokens = [
-    Token(dst_line=0, dst_col=0, src="app.js", src_line=0, src_col=0, name=None)
+    Mapping(generated_line=0, generated_column=0, source="app.js", original_line=0, original_column=0, name=None)
 ]
 
 # Encode into a sourcemap dict
 smap = codec.encode(tokens)
 
-# Decode back into a SourceMapIndex
+# Decode back into a MappingIndex
 decoded = codec.decode(smap)
 ```
 
